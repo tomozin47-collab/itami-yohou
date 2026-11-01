@@ -1,0 +1,815 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#fcfcfb">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="痛み予報">
+<meta name="robots" content="noindex">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" href="icon-192.png">
+<title>痛み予報</title>
+<style>
+:root {
+  color-scheme: light;
+  --bg: #f6f5f2;
+  --surface: #fcfcfb;
+  --border: #e4e2dc;
+  --text: #1d1c1a;
+  --text-2: #52514e;
+  --text-3: #7a7973;
+  --accent: #2a78d6;
+  --accent-ink: #ffffff;
+  --accent-soft: #e3eefb;
+  --up: #e34948;      /* 痛みが増える方向 / 気圧低下 */
+  --down: #2a78d6;    /* 痛みが減る方向 / 気圧上昇 */
+  --line: #2a78d6;
+  --grid: #ebe9e4;
+  --good: #0ca30c;
+  --warning: #fab219;
+  --serious: #ec835a;
+  --shadow: 0 1px 2px rgba(0,0,0,.05), 0 2px 8px rgba(0,0,0,.04);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #121211;
+    --surface: #1a1a19;
+    --border: #2e2e2b;
+    --text: #f0efec;
+    --text-2: #c3c2b7;
+    --text-3: #8f8e86;
+    --accent: #3987e5;
+    --accent-ink: #ffffff;
+    --accent-soft: #1d2c40;
+    --up: #e66767;
+    --down: #3987e5;
+    --line: #3987e5;
+    --grid: #2a2a27;
+    --shadow: none;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #121211; --surface: #1a1a19; --border: #2e2e2b; --text: #f0efec; --text-2: #c3c2b7; --text-3: #8f8e86;
+  --accent: #3987e5; --accent-ink: #fff; --accent-soft: #1d2c40; --up: #e66767; --down: #3987e5; --line: #3987e5; --grid: #2a2a27; --shadow: none;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background: var(--bg); color: var(--text);
+  font-family: system-ui, -apple-system, "Hiragino Sans", "Noto Sans JP", "Yu Gothic UI", sans-serif;
+  font-size: 16px; line-height: 1.6;
+  -webkit-tap-highlight-color: transparent;
+}
+main { max-width: 540px; margin: 0 auto; padding: 16px 16px calc(96px + env(safe-area-inset-bottom)); }
+header.top { display: flex; align-items: baseline; justify-content: space-between; margin: 4px 2px 14px; }
+header.top h1 { font-size: 22px; margin: 0; letter-spacing: .02em; }
+header.top .city { font-size: 13px; color: var(--text-3); }
+h2 { font-size: 15px; color: var(--text-2); margin: 22px 2px 8px; font-weight: 600; }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 16px; box-shadow: var(--shadow); margin-bottom: 12px; }
+.muted { color: var(--text-3); font-size: 13px; }
+.small { font-size: 13px; color: var(--text-2); }
+button { font: inherit; color: inherit; cursor: pointer; }
+.btn { border: 1px solid var(--border); background: var(--surface); border-radius: 12px; padding: 10px 14px; min-height: 44px; }
+.btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 600; width: 100%; font-size: 17px; }
+.btn.danger { color: var(--up); }
+.row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+section[hidden] { display: none; }
+
+/* 予報カード */
+.fc-head { display: flex; justify-content: space-between; align-items: center; }
+.fc-day { font-weight: 700; font-size: 17px; }
+.badge { display: inline-flex; align-items: center; gap: 6px; font-weight: 700; font-size: 15px; padding: 4px 12px; border-radius: 999px; background: var(--bg); border: 1px solid var(--border); }
+.badge i { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+.fc-msg { font-size: 18px; font-weight: 600; margin: 10px 0 6px; }
+.fc-reasons { margin: 8px 0 0; padding: 0; list-style: none; }
+.fc-reasons li { padding: 8px 0; border-top: 1px dashed var(--border); font-size: 14px; color: var(--text-2); }
+.fc-reasons li b { color: var(--text); font-weight: 600; }
+.wx { display: flex; gap: 16px; margin-top: 10px; font-size: 13px; color: var(--text-2); flex-wrap: wrap; }
+.notice { font-size: 12px; color: var(--text-3); margin: 8px 4px 0; }
+
+/* 記録フォーム */
+.pain-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; }
+.pain-grid button { min-height: 48px; border-radius: 12px; border: 1px solid var(--border); background: var(--bg); font-size: 18px; font-weight: 700; }
+.pain-grid button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.fatigue-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+.fatigue-grid button { min-height: 44px; border-radius: 12px; border: 1px solid var(--border); background: var(--bg); font-size: 13px; padding: 4px 2px; }
+.fatigue-grid button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 700; }
+.chip .x { margin-left: 6px; color: var(--text-3); font-weight: 700; }
+.chip .lag { margin-left: 6px; font-size: 11px; color: var(--text-3); border: 1px solid var(--border); border-radius: 6px; padding: 0 4px; }
+.add-row { display: flex; gap: 8px; margin-top: 10px; }
+.add-row input { flex: 1; min-width: 0; font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 8px 10px; min-height: 44px; }
+.scale-cap { display: flex; justify-content: space-between; font-size: 12px; color: var(--text-3); margin-top: 6px; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip { border: 1px solid var(--border); background: var(--bg); border-radius: 999px; padding: 8px 14px; min-height: 40px; font-size: 14px; }
+.chip[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); color: var(--text); font-weight: 600; }
+.field-label { font-weight: 600; margin: 16px 0 8px; font-size: 15px; }
+.field-label:first-child { margin-top: 0; }
+input[type="date"], select, textarea { font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 8px 10px; min-height: 44px; }
+textarea { width: 100%; min-height: 70px; resize: vertical; }
+.recent { list-style: none; padding: 0; margin: 0; }
+.recent li { display: flex; gap: 12px; align-items: center; padding: 10px 0; border-top: 1px solid var(--border); font-size: 14px; }
+.recent li:first-child { border-top: none; }
+.recent .pv { width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; font-weight: 700; background: var(--bg); border: 1px solid var(--border); flex: none; }
+.recent .dt { width: 72px; color: var(--text-2); flex: none; }
+.recent .fx { color: var(--text-3); font-size: 13px; }
+.recent button { margin-left: auto; border: none; background: none; color: var(--accent); font-size: 13px; }
+
+/* グラフ */
+.chart-wrap { position: relative; }
+.chart-wrap svg { display: block; width: 100%; height: auto; overflow: visible; }
+.chart-wrap text { fill: var(--text-3); font-size: 11px; }
+.chart-wrap .ttl { fill: var(--text-2); font-size: 12px; font-weight: 600; }
+.tip { position: absolute; pointer-events: none; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 6px 10px; font-size: 12px; box-shadow: 0 4px 14px rgba(0,0,0,.12); white-space: nowrap; display: none; color: var(--text); }
+.factor { display: grid; grid-template-columns: 1fr 120px 54px; gap: 10px; align-items: center; padding: 9px 0; border-top: 1px solid var(--border); font-size: 14px; }
+.factor:first-of-type { border-top: none; }
+.factor .bar { position: relative; height: 12px; }
+.factor .bar::before { content: ""; position: absolute; left: 50%; top: -3px; bottom: -3px; width: 1px; background: var(--text-3); }
+.factor .bar span { position: absolute; top: 2px; height: 8px; border-radius: 4px; }
+.factor .val { text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
+.factor .n { grid-column: 1 / -1; font-size: 12px; color: var(--text-3); margin-top: -6px; }
+details summary { cursor: pointer; color: var(--text-2); font-size: 13px; margin-top: 8px; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; margin-top: 6px; }
+th, td { text-align: left; padding: 4px 6px; border-bottom: 1px solid var(--border); }
+
+/* ナビ */
+nav.tabs { position: fixed; left: 0; right: 0; bottom: 0; background: var(--surface); border-top: 1px solid var(--border); display: flex; justify-content: center; padding-bottom: env(safe-area-inset-bottom); z-index: 5; }
+nav.tabs .inner { display: flex; width: 100%; max-width: 540px; }
+nav.tabs button { flex: 1; border: none; background: none; padding: 10px 0 12px; font-size: 12px; color: var(--text-3); display: flex; flex-direction: column; align-items: center; gap: 2px; min-height: 56px; }
+nav.tabs button .ic { font-size: 20px; line-height: 1; }
+nav.tabs button[aria-selected="true"] { color: var(--accent); font-weight: 700; }
+.toast { position: fixed; left: 50%; bottom: calc(80px + env(safe-area-inset-bottom)); transform: translateX(-50%); background: var(--text); color: var(--bg); padding: 10px 18px; border-radius: 999px; font-size: 14px; opacity: 0; transition: opacity .2s; pointer-events: none; z-index: 10; }
+.toast.show { opacity: 1; }
+.empty { text-align: center; padding: 24px 12px; }
+.empty p { margin: 0 0 14px; color: var(--text-2); }
+</style>
+</head>
+<body>
+<main>
+  <header class="top">
+    <h1>痛み予報</h1>
+    <span class="city" id="cityLabel"></span>
+  </header>
+
+  <!-- 予報 -->
+  <section id="tab-forecast">
+    <div class="card" id="installHint" hidden>
+      <b>ホーム画面に追加してください</b>
+      <p class="small" style="margin:6px 0 10px">iPhone：Safariの共有ボタン（□↑）→「ホーム画面に追加」<br>Android：Chromeのメニュー（⋮）→「ホーム画面に追加」<br>ブラウザで開いたままだと、しばらく使わない間に記録が消えることがあります。</p>
+      <button class="btn" id="installHintClose">閉じる</button>
+    </div>
+    <div id="forecastBody"></div>
+    <p class="notice">過去の記録から出した「目安」です。いつもと違う強い痛み・発熱・むくみなどがあるときは、予報に関係なく主治医に相談してください。</p>
+  </section>
+
+  <!-- 記録 -->
+  <section id="tab-log" hidden>
+    <div class="card">
+      <div class="field-label">日付</div>
+      <input type="date" id="logDate">
+      <div class="field-label">いちばん痛かったときの痛み</div>
+      <div class="pain-grid" id="painGrid"></div>
+      <div class="scale-cap"><span>0 痛くない</span><span>10 耐えられない</span></div>
+      <div class="field-label">だるさ <span class="muted">（任意）</span></div>
+      <div class="fatigue-grid" id="fatigueGrid"></div>
+      <div class="field-label">痛む場所 <span class="muted">（任意）</span></div>
+      <div class="chips" id="partChips"></div>
+      <div class="field-label">ほかの症状 <span class="muted">（任意）</span></div>
+      <div class="chips" id="symptomChips"></div>
+      <div class="field-label">当てはまること <span class="muted">（任意）</span></div>
+      <div class="chips" id="factorChips"></div>
+      <div class="field-label">メモ <span class="muted">（任意）</span></div>
+      <textarea id="memo" placeholder="例：朝こわばりが強かった"></textarea>
+      <div style="margin-top:16px"><button class="btn primary" id="saveBtn">記録する</button></div>
+    </div>
+    <h2>最近の記録</h2>
+    <div class="card"><ul class="recent" id="recentList"></ul></div>
+  </section>
+
+  <!-- 傾向 -->
+  <section id="tab-trend" hidden>
+    <h2>この30日</h2>
+    <div class="card">
+      <div class="chart-wrap" id="trendChart"></div>
+      <details><summary>表で見る</summary><div id="trendTable"></div></details>
+    </div>
+    <h2>痛みと関係がありそうなこと</h2>
+    <div class="card" id="factorList"></div>
+  </section>
+
+  <!-- 設定 -->
+  <section id="tab-settings" hidden>
+    <h2>住んでいる地域（気圧・紫外線の取得に使います）</h2>
+    <div class="card">
+      <div class="row">
+        <select id="citySelect"></select>
+        <button class="btn" id="geoBtn">現在地を使う</button>
+      </div>
+    </div>
+    <h2>記録する項目</h2>
+    <div class="card">
+      <div class="field-label">当てはまること</div>
+      <p class="small" style="margin:0 0 8px">「翌日」にした項目は、次の日の痛みとの関係を調べます（例：動きすぎた → 次の日に痛む）。</p>
+      <div class="chips" id="editFactors"></div>
+      <div class="add-row">
+        <input type="text" id="newFactor" placeholder="例：長時間立っていた" maxlength="20">
+        <select id="newFactorLag"><option value="0">その日</option><option value="1">翌日</option></select>
+        <button class="btn" data-add="factors">追加</button>
+      </div>
+      <div class="field-label">痛む場所</div>
+      <div class="chips" id="editParts"></div>
+      <div class="add-row">
+        <input type="text" id="newPart" placeholder="例：右ひざ" maxlength="20">
+        <button class="btn" data-add="parts">追加</button>
+      </div>
+      <div class="field-label">ほかの症状</div>
+      <div class="chips" id="editSymptoms"></div>
+      <div class="add-row">
+        <input type="text" id="newSymptom" placeholder="例：レイノー（指が白くなる）" maxlength="20">
+        <button class="btn" data-add="symptoms">追加</button>
+      </div>
+      <p class="small">項目を消しても、これまでの記録は残ります。</p>
+      <button class="btn" id="resetListsBtn">項目を最初の状態に戻す</button>
+    </div>
+    <h2>データ</h2>
+    <div class="card">
+      <p class="small" style="margin-top:0">記録はこのスマホの中だけに保存されます。機種変更やブラウザのデータ削除に備えて、ときどき書き出しておくと安心です。</p>
+      <div class="row">
+        <button class="btn" id="exportBtn">書き出す</button>
+        <label class="btn" style="display:inline-flex;align-items:center">読み込む<input type="file" id="importFile" accept="application/json" hidden></label>
+      </div>
+    </div>
+    <h2>お試し</h2>
+    <div class="card">
+      <p class="small" style="margin-top:0">デモデータ（架空の60日分）を入れると、予報と傾向がどう見えるか試せます。自分の記録は消えません。</p>
+      <div class="row">
+        <button class="btn" id="demoAddBtn">デモデータを入れる</button>
+        <button class="btn" id="demoDelBtn">デモデータを消す</button>
+      </div>
+    </div>
+    <div class="row" style="margin-top:20px"><button class="btn danger" id="wipeBtn">すべての記録を削除</button></div>
+  </section>
+</main>
+
+<nav class="tabs" role="tablist">
+  <div class="inner">
+    <button role="tab" data-tab="forecast" aria-selected="true"><span class="ic">☁︎</span>予報</button>
+    <button role="tab" data-tab="log"><span class="ic">✎</span>記録</button>
+    <button role="tab" data-tab="trend"><span class="ic">〰︎</span>傾向</button>
+    <button role="tab" data-tab="settings"><span class="ic">⚙︎</span>設定</button>
+  </div>
+</nav>
+<div class="toast" id="toast"></div>
+
+<script>
+'use strict';
+const KEY = 'itami-yohou-v1';
+const CITIES = [
+  { name: '札幌', lat: 43.06, lon: 141.35 }, { name: '仙台', lat: 38.27, lon: 140.87 },
+  { name: '東京', lat: 35.68, lon: 139.69 }, { name: '横浜', lat: 35.44, lon: 139.64 },
+  { name: '名古屋', lat: 35.18, lon: 136.91 }, { name: '大阪', lat: 34.69, lon: 135.50 },
+  { name: '広島', lat: 34.39, lon: 132.46 }, { name: '福岡', lat: 33.59, lon: 130.40 },
+  { name: '那覇', lat: 26.21, lon: 127.68 },
+];
+// 記録する項目の初期値。設定画面で追加・削除できる
+// factors の lag: 0 = その日の痛みに影響, 1 = 翌日の痛みに影響
+const DEFAULT_LISTS = {
+  factors: [
+    { id: 'sleep', label: '寝不足', lag: 0 }, { id: 'tired', label: '動きすぎた', lag: 1 },
+    { id: 'stress', label: 'ストレス', lag: 0 }, { id: 'sun', label: '日光を浴びた', lag: 1 },
+    { id: 'chill', label: '体が冷えた', lag: 0 }, { id: 'period', label: '生理中', lag: 0 },
+    { id: 'cold', label: '風邪っぽい', lag: 0 }, { id: 'missed', label: '薬を飲み忘れた', lag: 1 },
+    { id: 'dose', label: '薬の量が変わった', lag: 1 },
+  ],
+  parts: ['手・指', '手首', 'ひじ', '肩', 'あご', '首', 'ひざ', '足首・足', '腰', '胸', '全身'],
+  symptoms: ['熱っぽい', '発疹', '口内炎', 'むくみ', '朝のこわばり', '頭痛'],
+};
+const FATIGUE = ['なし', '少し', 'まあまあ', 'かなり', '動けない'];
+const PRESSURE_DROP = -4; // hPa（前日比）
+const MIN_DAYS = 7;       // 予報を出すのに必要な記録日数
+const MIN_HITS = 3;       // 条件ごとに必要な該当日数
+
+// 痛みとの関係を調べる条件。e=その日の記録, prev=前日の記録, w=その日の天気
+// 戻り値: true/false、判断できないときは null
+const has = (x, id) => x ? (x.factors || []).includes(id) : null;
+const WEATHER_SIGNALS = [
+  { id: 'pdrop', label: '気圧が下がる日', test: (e, prev, w) => w && w.dp != null ? w.dp <= PRESSURE_DROP : null,
+    why: w => `気圧が前日より${Math.abs(w.dp).toFixed(1)}hPa下がる見込み` },
+  { id: 'uv', label: '紫外線が強い日', test: (e, prev, w) => w && w.uv != null ? w.uv >= 6 : null,
+    why: w => `紫外線が強い（UV ${w.uv.toFixed(0)}）` },
+];
+function signals() {
+  return WEATHER_SIGNALS.concat(state.lists.factors.filter(f => !f.hidden).map(f => f.lag
+    ? { id: f.id, label: `「${f.label}」の翌日`, test: (e, prev) => has(prev, f.id), why: () => `前の日に「${f.label}」` }
+    : { id: f.id, label: `「${f.label}」の日`, test: e => has(e, f.id), why: () => f.label }));
+}
+const factorLabel = id => (state.lists.factors.find(f => f.id === id) || { label: id }).label;
+
+// ---------- ユーティリティ ----------
+const $ = s => document.querySelector(s);
+const pad = n => String(n).padStart(2, '0');
+const fmt = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+const today = () => fmt(new Date());
+const addDays = (s, n) => { const d = new Date(s + 'T00:00:00'); d.setDate(d.getDate() + n); return fmt(d); };
+const label = s => { const d = new Date(s + 'T00:00:00'); return `${d.getMonth() + 1}/${d.getDate()}(${'日月火水木金土'[d.getDay()]})`; };
+const mean = a => a.length ? a.reduce((x, y) => x + y, 0) / a.length : null;
+const round1 = x => Math.round(x * 10) / 10;
+const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const signed = x => (x > 0 ? '+' : x < 0 ? '−' : '±') + Math.abs(x).toFixed(1);
+
+function toast(msg) {
+  const t = $('#toast'); t.textContent = msg; t.classList.add('show');
+  clearTimeout(toast.timer); toast.timer = setTimeout(() => t.classList.remove('show'), 1800);
+}
+
+// ---------- 保存 ----------
+const defaultLists = () => JSON.parse(JSON.stringify(DEFAULT_LISTS));
+function load() {
+  let s = null;
+  try { s = JSON.parse(localStorage.getItem(KEY)); } catch (e) { /* 読めないときは初期状態 */ }
+  if (!s || !s.entries) s = { entries: {}, city: CITIES[2] };
+  if (!s.lists) s.lists = defaultLists();
+  return s;
+}
+function save() {
+  try { localStorage.setItem(KEY, JSON.stringify(state)); }
+  catch (e) { toast('保存できませんでした'); }
+}
+let state = load();
+let weather = {}; // 日付 → { p: 平均気圧, dp: 前日比, uv: 最大UV }
+let weatherStatus = 'loading';
+
+// ---------- 天気（Open-Meteo, APIキー不要） ----------
+async function fetchWeather() {
+  weatherStatus = 'loading';
+  const c = state.city;
+  const url = `https://api.open-meteo.com/v1/forecast?latitude=${c.lat}&longitude=${c.lon}` +
+    `&hourly=surface_pressure&daily=uv_index_max&past_days=92&forecast_days=3&timezone=Asia%2FTokyo`;
+  try {
+    const j = await (await fetch(url)).json();
+    const byDay = {};
+    j.hourly.time.forEach((t, i) => {
+      const v = j.hourly.surface_pressure[i];
+      if (v != null) (byDay[t.slice(0, 10)] ||= []).push(v);
+    });
+    const w = {};
+    Object.keys(byDay).sort().forEach(d => { w[d] = { p: mean(byDay[d]) }; });
+    Object.keys(w).forEach(d => { const pv = w[addDays(d, -1)]; w[d].dp = pv ? w[d].p - pv.p : null; });
+    j.daily.time.forEach((d, i) => { (w[d] ||= {}).uv = j.daily.uv_index_max[i]; });
+    weather = w;
+    weatherStatus = 'ok';
+    // 終わった日の記録に天気を残しておく（92日より前も分析できるように）
+    let changed = false;
+    for (const d in state.entries) {
+      const e = state.entries[d];
+      if (!e.w && d < today() && w[d] && w[d].dp != null) {
+        e.w = { p: round1(w[d].p), dp: round1(w[d].dp), uv: w[d].uv };
+        changed = true;
+      }
+    }
+    if (changed) save();
+  } catch (e) {
+    weatherStatus = 'error';
+  }
+  renderAll();
+}
+const weatherOf = d => (state.entries[d] && state.entries[d].w) || weather[d] || null;
+
+// ---------- 分析と予報 ----------
+function analyze() {
+  const days = Object.keys(state.entries).sort();
+  const res = signals().map(s => {
+    const on = [], off = [];
+    days.forEach(d => {
+      const e = state.entries[d];
+      const r = s.test(e, state.entries[addDays(d, -1)], weatherOf(d));
+      if (r === true) on.push(e.pain); else if (r === false) off.push(e.pain);
+    });
+    const delta = on.length && off.length ? mean(on) - mean(off) : null;
+    return { s, n: on.length, delta };
+  });
+  return { days, res };
+}
+
+function predict(d, a) {
+  const recent = a.days.slice(-30).map(x => state.entries[x].pain);
+  const base = mean(recent);
+  const prev = state.entries[addDays(d, -1)];
+  let e = state.entries[d];
+  // まだ記録していない日は、生理だけ前日から続くとみなす
+  if (!e && prev && prev.factors.includes('period')) e = { factors: ['period'] };
+  const w = weather[d] || weatherOf(d);
+  let p = base;
+  const reasons = [];
+  a.res.forEach(r => {
+    if (r.n < MIN_HITS || r.delta == null || Math.abs(r.delta) < 0.5) return;
+    if (r.s.test(e, prev, w) !== true) return;
+    p += r.delta * 0.8; // 条件が重なったときに大きく出すぎないよう少し控えめに
+    reasons.push({ text: r.s.why(w), delta: r.delta });
+  });
+  p = clamp(p, 0, 10);
+  const diff = p - base;
+  const level = diff >= 1.5 || p >= 7 ? 'serious' : diff >= 0.7 ? 'warning' : 'good';
+  reasons.sort((x, y) => y.delta - x.delta);
+  return { base, p, level, reasons, w };
+}
+
+// ---------- 予報タブ ----------
+const LEVELS = {
+  good: { name: 'いつも通り', color: 'var(--good)', msg: 'いつもと同じくらいの見込み' },
+  warning: { name: 'やや注意', color: 'var(--warning)', msg: 'いつもより少し痛みやすそう' },
+  serious: { name: '注意', color: 'var(--serious)', msg: 'いつもより痛みやすそう。予定はゆるめに' },
+};
+function renderForecast() {
+  $('#cityLabel').textContent = state.city.name + (weatherStatus === 'error' ? '（天気を取得できません）' : '');
+  const a = analyze();
+  const el = $('#forecastBody');
+  if (a.days.length === 0) {
+    el.innerHTML = `<div class="card empty">
+      <p>毎日の痛みを記録すると、<br>気圧や体調との関係から「痛みやすい日」を予報します。</p>
+      <div class="row" style="justify-content:center">
+        <button class="btn primary" style="width:auto" data-go="log">記録をはじめる</button>
+        <button class="btn" id="demoQuick">デモで試す</button>
+      </div></div>`;
+    $('#demoQuick').onclick = addDemo;
+    el.querySelector('[data-go]').onclick = () => showTab('log');
+    return;
+  }
+  if (a.days.length < MIN_DAYS) {
+    el.innerHTML = `<div class="card empty"><p>予報まで あと <b>${MIN_DAYS - a.days.length}日</b> 記録してください。<br>記録が増えるほど、あなた専用の予報が正確になります。</p></div>` + wxCards();
+    return;
+  }
+  const t = today();
+  el.innerHTML = [['今日', t], ['明日', addDays(t, 1)]].map(([name, d]) => {
+    const f = predict(d, a);
+    const L = LEVELS[f.level];
+    const reasons = f.reasons.length
+      ? `<ul class="fc-reasons">${f.reasons.map(r => `<li><b>${esc(r.text)}</b><br>→ これまで、この条件の日は痛みが平均 ${signed(r.delta)}</li>`).join('')}</ul>`
+      : `<p class="small" style="margin:6px 0 0">痛みが増えやすい条件は、今のところ見当たりません。</p>`;
+    return `<div class="card">
+      <div class="fc-head"><span class="fc-day">${name} ${label(d)}</span>
+        <span class="badge"><i style="background:${L.color}"></i>${L.name}</span></div>
+      <div class="fc-msg">${L.msg}</div>
+      <div class="small">予想 ${f.p.toFixed(1)} / 10（最近の平均 ${f.base.toFixed(1)}）</div>
+      ${reasons}
+      ${wxLine(f.w)}
+    </div>`;
+  }).join('') + `<p class="notice">記録 ${a.days.length}日分から計算しています。</p>`;
+}
+function wxLine(w) {
+  if (!w) return '';
+  const parts = [];
+  if (w.dp != null) parts.push(`気圧 ${w.p.toFixed(0)}hPa（前日比 ${signed(w.dp)}）`);
+  if (w.uv != null) parts.push(`紫外線 UV ${w.uv.toFixed(0)}`);
+  return `<div class="wx">${parts.map(esc).join('<span>·</span>')}</div>`;
+}
+function wxCards() {
+  const t = today();
+  return [['今日', t], ['明日', addDays(t, 1)]].map(([n, d]) =>
+    weather[d] ? `<div class="card"><div class="fc-day">${n} ${label(d)}</div>${wxLine(weather[d])}</div>` : '').join('');
+}
+
+// ---------- 記録タブ ----------
+const emptyForm = () => ({ pain: null, fatigue: null, parts: [], symptoms: [], factors: [] });
+let form = emptyForm();
+const chipHtml = (attr, value, text) => `<button type="button" class="chip" ${attr}="${esc(value)}" aria-pressed="false">${esc(text)}</button>`;
+function buildChips() {
+  // 削除した項目でも、その日の記録に付いていれば表示して外せるようにする
+  const withUsed = (list, used) => list.concat(used.filter(v => !list.includes(v)));
+  const L = state.lists;
+  $('#partChips').innerHTML = withUsed(L.parts, form.parts).map(p => chipHtml('data-part', p, p)).join('');
+  $('#symptomChips').innerHTML = withUsed(L.symptoms, form.symptoms).map(p => chipHtml('data-symptom', p, p)).join('');
+  const fids = withUsed(L.factors.filter(f => !f.hidden).map(f => f.id), form.factors);
+  $('#factorChips').innerHTML = fids.map(id => chipHtml('data-factor', id, factorLabel(id))).join('');
+}
+function buildForm() {
+  $('#painGrid').innerHTML = Array.from({ length: 11 }, (_, i) => `<button type="button" data-pain="${i}" aria-pressed="false">${i}</button>`).join('');
+  $('#fatigueGrid').innerHTML = FATIGUE.map((t, i) => `<button type="button" data-fatigue="${i}" aria-pressed="false">${t}</button>`).join('');
+  $('#painGrid').onclick = ev => { const b = ev.target.closest('[data-pain]'); if (b) { form.pain = +b.dataset.pain; syncForm(); } };
+  $('#fatigueGrid').onclick = ev => {
+    const b = ev.target.closest('[data-fatigue]'); if (!b) return;
+    form.fatigue = form.fatigue === +b.dataset.fatigue ? null : +b.dataset.fatigue; syncForm();
+  };
+  $('#partChips').onclick = ev => { const b = ev.target.closest('[data-part]'); if (b) { toggle(form.parts, b.dataset.part); syncForm(); } };
+  $('#symptomChips').onclick = ev => { const b = ev.target.closest('[data-symptom]'); if (b) { toggle(form.symptoms, b.dataset.symptom); syncForm(); } };
+  $('#factorChips').onclick = ev => { const b = ev.target.closest('[data-factor]'); if (b) { toggle(form.factors, b.dataset.factor); syncForm(); } };
+  $('#logDate').max = today();
+  $('#logDate').onchange = () => loadForm($('#logDate').value);
+  $('#saveBtn').onclick = saveForm;
+}
+const toggle = (arr, v) => { const i = arr.indexOf(v); i >= 0 ? arr.splice(i, 1) : arr.push(v); };
+function syncForm() {
+  document.querySelectorAll('[data-pain]').forEach(b => b.setAttribute('aria-pressed', +b.dataset.pain === form.pain));
+  document.querySelectorAll('[data-fatigue]').forEach(b => b.setAttribute('aria-pressed', +b.dataset.fatigue === form.fatigue));
+  document.querySelectorAll('[data-part]').forEach(b => b.setAttribute('aria-pressed', form.parts.includes(b.dataset.part)));
+  document.querySelectorAll('[data-symptom]').forEach(b => b.setAttribute('aria-pressed', form.symptoms.includes(b.dataset.symptom)));
+  document.querySelectorAll('[data-factor]').forEach(b => b.setAttribute('aria-pressed', form.factors.includes(b.dataset.factor)));
+}
+function loadForm(d) {
+  $('#logDate').value = d;
+  const e = state.entries[d];
+  form = e ? { pain: e.pain, fatigue: e.fatigue ?? null, parts: [...e.parts], symptoms: [...(e.symptoms || [])], factors: [...e.factors] } : emptyForm();
+  $('#memo').value = e ? e.memo || '' : '';
+  $('#saveBtn').textContent = e ? 'この日の記録を更新' : '記録する';
+  buildChips();
+  syncForm();
+}
+function saveForm() {
+  const d = $('#logDate').value || today();
+  if (form.pain == null) { toast('痛みの強さを選んでください'); return; }
+  const old = state.entries[d];
+  state.entries[d] = { pain: form.pain, fatigue: form.fatigue, parts: form.parts, symptoms: form.symptoms, factors: form.factors, memo: $('#memo').value.trim(), w: old && old.w };
+  if (d < today() && !state.entries[d].w && weather[d] && weather[d].dp != null) {
+    state.entries[d].w = { p: round1(weather[d].p), dp: round1(weather[d].dp), uv: weather[d].uv };
+  }
+  save();
+  toast(old ? '更新しました' : '記録しました');
+  loadForm(d);
+  renderAll();
+}
+function renderRecent() {
+  const days = Object.keys(state.entries).sort().reverse().slice(0, 7);
+  $('#recentList').innerHTML = days.length ? days.map(d => {
+    const e = state.entries[d];
+    const fx = [e.fatigue != null ? `だるさ:${FATIGUE[e.fatigue]}` : null, ...e.parts, ...(e.symptoms || []), ...e.factors.map(factorLabel)].filter(Boolean).join('・');
+    return `<li><span class="pv">${e.pain}</span><span class="dt">${label(d)}</span><span class="fx">${esc(fx || '—')}</span><button data-edit="${d}">編集</button></li>`;
+  }).join('') : '<li class="muted">まだ記録がありません</li>';
+  $('#recentList').onclick = ev => { const b = ev.target.closest('[data-edit]'); if (b) { loadForm(b.dataset.edit); window.scrollTo({ top: 0, behavior: 'smooth' }); } };
+}
+
+// ---------- 傾向タブ ----------
+function renderTrend() {
+  const t = today();
+  const days = Array.from({ length: 30 }, (_, i) => addDays(t, i - 29));
+  const rows = days.map(d => {
+    const e = state.entries[d]; const w = weatherOf(d);
+    return { d, pain: e ? e.pain : null, fatigue: e ? e.fatigue ?? null : null, dp: w && w.dp != null ? w.dp : null };
+  });
+  drawTrend($('#trendChart'), rows);
+  $('#trendTable').innerHTML = `<table><tr><th>日付</th><th>痛み</th><th>だるさ</th><th>気圧の前日比</th></tr>${rows.slice().reverse().map(r =>
+    `<tr><td>${label(r.d)}</td><td>${r.pain ?? '—'}</td><td>${r.fatigue == null ? '—' : FATIGUE[r.fatigue]}</td><td>${r.dp == null ? '—' : signed(r.dp) + 'hPa'}</td></tr>`).join('')}</table>`;
+  renderFactors();
+}
+
+function drawTrend(host, rows) {
+  const W = Math.max(300, host.clientWidth || 340);
+  const L = 28, R = 8, top1 = 22, h1 = 140, topF = top1 + h1 + 40, hF = 56, top2 = topF + hF + 44, h2 = 70, H = top2 + h2 + 22;
+  const n = rows.length, step = (W - L - R) / n;
+  const x = i => L + step * (i + 0.5);
+  const y1 = v => top1 + h1 - (v / 10) * h1;
+  const yF = v => topF + hF - (v / 4) * hF;
+  const bw = Math.min(10, step * 0.6);
+  const dpMax = Math.max(6, ...rows.map(r => Math.abs(r.dp ?? 0)));
+  const y2 = v => top2 + h2 / 2 - (v / dpMax) * (h2 / 2);
+  let s = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="30日間の痛みと気圧の変化">`;
+  // 痛み（上段）
+  s += `<text class="ttl" x="0" y="12">痛み（0〜10）</text>`;
+  [0, 5, 10].forEach(v => {
+    s += `<line x1="${L}" x2="${W - R}" y1="${y1(v)}" y2="${y1(v)}" stroke="var(--grid)"/>`;
+    s += `<text x="${L - 6}" y="${y1(v) + 4}" text-anchor="end">${v}</text>`;
+  });
+  let path = '', pen = false;
+  rows.forEach((r, i) => {
+    if (r.pain == null) { pen = false; return; }
+    path += `${pen ? 'L' : 'M'}${x(i).toFixed(1)},${y1(r.pain).toFixed(1)}`; pen = true;
+  });
+  s += `<path d="${path}" fill="none" stroke="var(--line)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`;
+  rows.forEach((r, i) => { if (r.pain != null) s += `<circle cx="${x(i)}" cy="${y1(r.pain)}" r="4" fill="var(--line)" stroke="var(--surface)" stroke-width="2"/>`; });
+  // だるさ（中段）
+  s += `<text class="ttl" x="0" y="${topF - 12}">だるさ</text>`;
+  [[0, 'なし'], [4, '動けない']].forEach(([v, t]) => {
+    s += `<line x1="${L}" x2="${W - R}" y1="${yF(v)}" y2="${yF(v)}" stroke="var(--grid)"/>`;
+    s += `<text x="${W - R}" y="${yF(v) - 3}" text-anchor="end">${t}</text>`;
+  });
+  rows.forEach((r, i) => {
+    if (r.fatigue == null) return;
+    const hgt = Math.max(2, yF(0) - yF(r.fatigue));
+    s += `<rect x="${x(i) - bw / 2}" y="${yF(0) - hgt}" width="${bw}" height="${hgt}" rx="2" fill="var(--line)" opacity="${r.fatigue ? 1 : 0.35}"/>`;
+  });
+  // 気圧の前日比（下段）
+  s += `<text class="ttl" x="0" y="${top2 - 14}">気圧の前日比（hPa）</text>`;
+  s += `<line x1="${L}" x2="${W - R}" y1="${y2(0)}" y2="${y2(0)}" stroke="var(--text-3)"/>`;
+  s += `<text x="${L - 6}" y="${y2(dpMax) + 8}" text-anchor="end">+${dpMax.toFixed(0)}</text>`;
+  s += `<text x="${L - 6}" y="${y2(-dpMax)}" text-anchor="end">−${dpMax.toFixed(0)}</text>`;
+  rows.forEach((r, i) => {
+    if (r.dp == null || Math.abs(r.dp) < 0.05) return;
+    const y0 = y2(0), yv = y2(r.dp);
+    s += `<rect x="${x(i) - bw / 2}" y="${Math.min(y0, yv)}" width="${bw}" height="${Math.abs(yv - y0)}" rx="2" fill="${r.dp < 0 ? 'var(--up)' : 'var(--down)'}"/>`;
+  });
+  // 日付ラベル
+  [0, 7, 14, 21, 29].forEach(i => { s += `<text x="${x(i)}" y="${H - 4}" text-anchor="middle">${label(rows[i].d).replace(/\(.\)/, '')}</text>`; });
+  s += `<line id="xh" x1="0" x2="0" y1="${top1}" y2="${top2 + h2}" stroke="var(--text-3)" stroke-dasharray="3 3" visibility="hidden"/>`;
+  s += `<rect id="hit" x="${L}" y="0" width="${W - L - R}" height="${H}" fill="transparent"/></svg><div class="tip" id="tip"></div>`;
+  host.innerHTML = s;
+
+  const svg = host.querySelector('svg'), xh = host.querySelector('#xh'), tip = host.querySelector('#tip');
+  const move = ev => {
+    const rect = svg.getBoundingClientRect();
+    const px = (ev.clientX - rect.left) * (W / rect.width);
+    const i = clamp(Math.floor((px - L) / step), 0, n - 1), r = rows[i];
+    xh.setAttribute('x1', x(i)); xh.setAttribute('x2', x(i)); xh.setAttribute('visibility', 'visible');
+    tip.innerHTML = `<b>${label(r.d)}</b><br>痛み ${r.pain ?? '記録なし'}<br>だるさ ${r.fatigue == null ? '—' : FATIGUE[r.fatigue]}<br>気圧 ${r.dp == null ? '—' : signed(r.dp) + 'hPa'}`;
+    tip.style.display = 'block';
+    const left = x(i) * rect.width / W;
+    tip.style.left = clamp(left - tip.offsetWidth / 2, 0, rect.width - tip.offsetWidth) + 'px';
+    tip.style.top = '18px';
+  };
+  const leave = () => { xh.setAttribute('visibility', 'hidden'); tip.style.display = 'none'; };
+  svg.addEventListener('pointermove', move);
+  svg.addEventListener('pointerdown', move);
+  svg.addEventListener('pointerleave', leave);
+}
+
+function renderFactors() {
+  const a = analyze();
+  const el = $('#factorList');
+  const list = a.res.filter(r => r.n >= MIN_HITS && r.delta != null).sort((p, q) => q.delta - p.delta);
+  if (a.days.length < MIN_DAYS || !list.length) {
+    el.innerHTML = `<p class="small" style="margin:0">記録がもう少し増えると、ここに「痛みが増えやすい条件」が出てきます。それぞれの条件に${MIN_HITS}日以上当てはまる記録が必要です。</p>`;
+    return;
+  }
+  const max = 3;
+  el.innerHTML = `<p class="small" style="margin:0 0 6px">その条件の日は、そうでない日と比べて痛みが平均どれだけ違うか</p>` + list.map(r => {
+    const w = Math.min(Math.abs(r.delta), max) / max * 50;
+    const pos = r.delta >= 0;
+    return `<div class="factor"><span>${r.s.label}</span>
+      <span class="bar"><span style="${pos ? 'left:50%' : `left:${50 - w}%`};width:${w}%;background:${pos ? 'var(--up)' : 'var(--down)'}"></span></span>
+      <span class="val">${signed(r.delta)}</span>
+      <span class="n">${r.n}日 当てはまった${r.n < 6 ? '（まだ少なめ・参考程度）' : ''}</span></div>`;
+  }).join('');
+}
+
+// ---------- 設定タブ ----------
+function buildSettings() {
+  const sel = $('#citySelect');
+  const syncSel = () => {
+    const opts = CITIES.map(c => `<option value="${c.name}">${c.name}</option>`);
+    if (!CITIES.some(c => c.name === state.city.name)) opts.unshift(`<option value="${esc(state.city.name)}">${esc(state.city.name)}</option>`);
+    sel.innerHTML = opts.join(''); sel.value = state.city.name;
+  };
+  syncSel();
+  sel.onchange = () => { state.city = CITIES.find(c => c.name === sel.value) || state.city; save(); fetchWeather(); toast(state.city.name + 'に変更しました'); };
+  $('#geoBtn').onclick = () => {
+    if (!navigator.geolocation) { toast('この端末では使えません'); return; }
+    navigator.geolocation.getCurrentPosition(p => {
+      state.city = { name: '現在地', lat: round1(p.coords.latitude), lon: round1(p.coords.longitude) };
+      save(); syncSel(); fetchWeather(); toast('現在地に変更しました');
+    }, () => toast('現在地を取得できませんでした'));
+  };
+  $('#exportBtn').onclick = () => {
+    const blob = new Blob([JSON.stringify(state, null, 1)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob); a.download = `itami-yohou-${today()}.json`; a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  };
+  $('#importFile').onchange = async ev => {
+    const f = ev.target.files[0]; if (!f) return;
+    try {
+      const s = JSON.parse(await f.text());
+      if (!s.entries) throw new Error();
+      Object.assign(state.entries, s.entries);
+      if (s.lists) state.lists = s.lists;
+      save(); renderListEditor(); loadForm(today()); renderAll(); toast('読み込みました');
+    } catch (e) { toast('読み込めないファイルです'); }
+    ev.target.value = '';
+  };
+  buildListEditor();
+  $('#demoAddBtn').onclick = addDemo;
+  $('#demoDelBtn').onclick = () => {
+    for (const d in state.entries) if (state.entries[d].demo) delete state.entries[d];
+    save(); loadForm(today()); renderAll(); toast('デモデータを消しました');
+  };
+  $('#wipeBtn').onclick = () => {
+    if (!confirm('すべての記録を削除します。元に戻せません。よろしいですか？')) return;
+    state.entries = {}; save(); loadForm(today()); renderAll(); toast('削除しました');
+  };
+}
+
+// 記録する項目の編集。当てはまること は消しても過去の記録の表示に使うので hidden にするだけ
+function renderListEditor() {
+  const L = state.lists;
+  $('#editFactors').innerHTML = L.factors.filter(f => !f.hidden).map(f =>
+    `<button type="button" class="chip" data-id="${esc(f.id)}">${esc(f.label)}<span class="lag" title="タップで切り替え">${f.lag ? '翌日' : 'その日'}</span><span class="x" aria-label="削除">×</span></button>`).join('');
+  $('#editParts').innerHTML = L.parts.map(p => `<button type="button" class="chip" data-v="${esc(p)}">${esc(p)}<span class="x" aria-label="削除">×</span></button>`).join('');
+  $('#editSymptoms').innerHTML = L.symptoms.map(p => `<button type="button" class="chip" data-v="${esc(p)}">${esc(p)}<span class="x" aria-label="削除">×</span></button>`).join('');
+}
+function listsChanged(msg) {
+  save(); renderListEditor(); buildChips(); syncForm(); renderAll();
+  if (msg) toast(msg);
+}
+function buildListEditor() {
+  renderListEditor();
+  $('#editFactors').onclick = ev => {
+    const b = ev.target.closest('[data-id]'); if (!b) return;
+    const f = state.lists.factors.find(x => x.id === b.dataset.id);
+    if (ev.target.closest('.lag')) { f.lag = f.lag ? 0 : 1; listsChanged(`「${f.label}」は${f.lag ? '翌日' : 'その日'}の痛みと比べます`); return; }
+    if (ev.target.closest('.x')) { f.hidden = true; listsChanged(`「${f.label}」を消しました`); }
+  };
+  const removeFrom = key => ev => {
+    const b = ev.target.closest('[data-v]'); if (!b || !ev.target.closest('.x')) return;
+    state.lists[key] = state.lists[key].filter(v => v !== b.dataset.v);
+    listsChanged(`「${b.dataset.v}」を消しました`);
+  };
+  $('#editParts').onclick = removeFrom('parts');
+  $('#editSymptoms').onclick = removeFrom('symptoms');
+  const inputs = { factors: '#newFactor', parts: '#newPart', symptoms: '#newSymptom' };
+  document.querySelectorAll('[data-add]').forEach(btn => btn.onclick = () => {
+    const key = btn.dataset.add, input = $(inputs[key]), v = input.value.trim();
+    if (!v) return;
+    if (key === 'factors') {
+      const lag = +$('#newFactorLag').value;
+      const same = state.lists.factors.find(f => f.label === v);
+      if (same) { same.hidden = false; same.lag = lag; }
+      else state.lists.factors.push({ id: 'c' + Date.now().toString(36), label: v, lag });
+    } else if (!state.lists[key].includes(v)) {
+      state.lists[key].push(v);
+    }
+    input.value = '';
+    listsChanged(`「${v}」を追加しました`);
+  });
+  $('#resetListsBtn').onclick = () => {
+    if (!confirm('記録する項目を最初の状態に戻します。これまでの記録は消えません。')) return;
+    // 自分で追加した項目は、過去の記録の表示用に hidden で残す
+    const custom = state.lists.factors.filter(f => !DEFAULT_LISTS.factors.some(d => d.id === f.id)).map(f => ({ ...f, hidden: true }));
+    state.lists = defaultLists();
+    state.lists.factors.push(...custom);
+    listsChanged('最初の状態に戻しました');
+  };
+}
+
+// 架空の60日分。気圧低下・動きすぎた翌日・寝不足・生理で痛みが上がるように作ってある
+function addDemo() {
+  const t = today();
+  let p = 1012;
+  const ent = {};
+  for (let i = 60; i >= 1; i--) {
+    const d = addDays(t, -i);
+    const prevP = p;
+    p += (Math.random() - 0.5) * 12 + (1012 - p) * 0.2;
+    const dp = p - prevP;
+    const uv = round1(2 + Math.random() * 7);
+    const f = [];
+    if (Math.random() < 0.2) f.push('sleep');
+    if (Math.random() < 0.2) f.push('tired');
+    if (Math.random() < 0.15) f.push('stress');
+    if (Math.random() < 0.25) f.push('sun');
+    if ((60 - i) % 28 < 5) f.push('period');
+    if (Math.random() < 0.05) f.push('missed');
+    const prev = ent[addDays(d, -1)];
+    let pain = 2.5 + (dp <= PRESSURE_DROP ? 2.2 : 0) + (has(prev, 'tired') ? 1.6 : 0) + (has(prev, 'sun') ? 0.8 : 0)
+      + (f.includes('sleep') ? 1 : 0) + (f.includes('period') ? 1.2 : 0) + (Math.random() - 0.5) * 2;
+    pain = clamp(Math.round(pain), 0, 10);
+    const fatigue = clamp(Math.round(pain / 2.5 + (f.includes('sleep') ? 1 : 0) + (Math.random() - 0.5)), 0, 4);
+    const symptoms = [];
+    if (pain >= 5) symptoms.push('朝のこわばり');
+    if (Math.random() < 0.08) symptoms.push('口内炎');
+    if (has(prev, 'sun') && Math.random() < 0.4) symptoms.push('発疹');
+    ent[d] = { pain, fatigue, parts: pain >= 5 ? ['手・指', 'ひざ'] : pain >= 3 ? ['手・指'] : [], symptoms, factors: f, memo: '', w: { p: round1(p), dp: round1(dp), uv }, demo: true };
+  }
+  for (const d in ent) if (!state.entries[d]) state.entries[d] = ent[d];
+  save(); renderAll(); toast('デモデータを入れました');
+}
+
+// ---------- タブ ----------
+function showTab(name) {
+  document.querySelectorAll('nav.tabs button').forEach(b => b.setAttribute('aria-selected', b.dataset.tab === name));
+  ['forecast', 'log', 'trend', 'settings'].forEach(t => { $('#tab-' + t).hidden = t !== name; });
+  if (name === 'trend') renderTrend(); // 幅を測るので表示後に描く
+  window.scrollTo(0, 0);
+}
+document.querySelector('nav.tabs').onclick = ev => { const b = ev.target.closest('[data-tab]'); if (b) showTab(b.dataset.tab); };
+
+function renderAll() {
+  renderForecast();
+  renderRecent();
+  if (!$('#tab-trend').hidden) renderTrend();
+}
+
+buildForm();
+buildSettings();
+loadForm(today());
+renderAll();
+fetchWeather();
+window.addEventListener('resize', () => { if (!$('#tab-trend').hidden) renderTrend(); });
+// スマホのブラウザで開いているときだけ、ホーム画面への追加を案内する
+(() => {
+  const standalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone;
+  const mobile = /iPhone|iPad|iPod|Android/.test(navigator.userAgent);
+  let dismissed = false;
+  try { dismissed = localStorage.getItem(KEY + '-hint') === '1'; } catch (e) { /* 表示するだけ */ }
+  if (standalone || !mobile || dismissed) return;
+  $('#installHint').hidden = false;
+  $('#installHintClose').onclick = () => {
+    $('#installHint').hidden = true;
+    try { localStorage.setItem(KEY + '-hint', '1'); } catch (e) { /* 次回また出るだけ */ }
+  };
+})();
+if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});
+</script>
+</body>
+</html>
